@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>○時○分の○分前（後）</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --fg: #000;
+  --bg: #ffffff;
+  --accent: #000;
+  --border: #333;
+  --btn-bg: #f0f0f0;
+  --btn-hover: #ddd;
+  --radius: 8px;
+  --correct: #8bc34a;
+  --wrong: #ff9800;
+}
+
+html, body {
+  font-family: 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100dvh;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  gap: 20px;
+}
+
+/* ===== Main Layout ===== */
+.main-area {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.clock-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.instruction-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  width: min(86vw, 320px);
+  flex-shrink: 0;
+}
+
+/* ===== Analog Clock ===== */
+.clock-container {
+  position: relative;
+  width: min(70vw, 340px);
+  height: min(70vw, 340px);
+}
+
+canvas#clockCanvas {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+canvas#clockCanvas:active { cursor: grabbing; }
+
+.digital-display {
+  text-align: center;
+  font-size: clamp(24px, 5vw, 36px);
+  font-weight: bold;
+  letter-spacing: 2px;
+  min-height: 1.4em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.digital-display.hidden { display: none; }
+.clock-container.hidden { display: none; }
+
+/* ===== Icon Buttons (▷▢) ===== */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, 3vw, 20px);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  color: #000;
+  line-height: 1;
+  opacity: 0.55;
+  font-weight: normal;
+}
+
+.icon-btn:hover { opacity: 0.85; }
+.icon-btn:active { opacity: 0.4; }
+.icon-btn:disabled { opacity: 0.2; cursor: default; }
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ===== Instruction Display ===== */
+.instruction-text {
+  font-size: clamp(18px, 4.6vw, 30px);
+  font-weight: bold;
+  line-height: 1.6;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--accent);
+  width: 100%;
+}
+
+.instr-num {
+  display: inline-block;
+  min-width: 1.7em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+#instrHourWrap { display: none; }
+#instrHourWrap.show { display: inline; }
+
+#instrDir {
+  display: inline-block;
+  min-width: 1.3em;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+#instrDir:hover { opacity: 0.65; }
+#instrDir:active { opacity: 0.35; }
+
+/* ===== Answer Section ===== */
+.answer-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.answer-label {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.drum-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drum-unit {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.drum {
+  position: relative;
+  width: 76px;
+  height: 60px;
+  overflow: hidden;
+  border-radius: 13px;
+  background: #fff;
+  border: 2px solid #d1cdc7;
+  touch-action: none;
+  cursor: grab;
+}
+.drum:active { cursor: grabbing; }
+
+.drum-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+}
+
+.drum-item {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: #2D334E;
+}
+.drum-item.empty {
+  font-size: 18px;
+  color: #bbb;
+}
+
+.drum-highlight {
+  display: none;
+}
+
+.drum-fade-top, .drum-fade-bottom {
+  display: none;
+}
+
+.check-btn {
+  padding: 10px 32px;
+  font-size: 18px;
+  font-weight: bold;
+  border: 1px solid #aaa;
+  border-radius: var(--radius);
+  background: var(--btn-bg);
+  cursor: pointer;
+  min-height: 44px;
+}
+.check-btn:hover { background: var(--btn-hover); }
+.check-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ===== Feedback Mark ===== */
+.feedback-mark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  font-size: min(40vw, 180px);
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 500;
+  opacity: 0;
+}
+.feedback-mark.correct { color: var(--correct); }
+.feedback-mark.wrong { color: var(--wrong); }
+.feedback-mark.show {
+  animation: markPop 0.9s ease forwards;
+}
+@keyframes markPop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  25%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ===== Settings ===== */
+.settings-toggle {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-size: 28px;
+}
+
+.settings-toggle:hover { opacity: 0.7; }
+
+.settings-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  justify-content: center;
+  align-items: center;
+}
+
+.settings-overlay.open { display: flex; }
+
+.settings-panel {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: min(90vw, 420px);
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+
+.settings-panel h2 {
+  font-size: 22px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setting-row:last-child { border-bottom: none; }
+
+.setting-label {
+  font-size: 15px;
+  font-weight: bold;
+  flex: 1;
+  min-width: 140px;
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.setting-control select,
+.setting-control input {
+  font-size: 15px;
+  padding: 4px 8px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: var(--bg);
+  min-height: 36px;
+}
+
+.spin-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg);
+}
+
+.spin-btn:hover { opacity: 0.6; }
+
+.spin-val {
+  min-width: 36px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: bold;
+}
+
+.settings-close {
+  display: block;
+  margin: 16px auto 0;
+  padding: 8px 28px;
+  font-size: 16px;
+  font-weight: bold;
+  border: 1px solid #aaa;
+  border-radius: var(--radius);
+  background: var(--btn-bg);
+  cursor: pointer;
+}
+
+.settings-close:hover { background: var(--btn-hover); }
+
+/* ===== Responsive ===== */
+@media (max-width: 640px) {
+  .main-area {
+    flex-direction: column;
+    align-items: center;
+  }
+  .clock-container {
+    width: min(80vw, 300px);
+    height: min(80vw, 300px);
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="main-area">
+  <!-- Clock Section -->
+  <div class="clock-section">
+    <div class="clock-container" id="clockContainer">
+      <canvas id="clockCanvas" width="680" height="680"></canvas>
+    </div>
+    <div id="digitalDisplay" class="digital-display hidden"></div>
+    <div class="btn-row">
+      <button class="icon-btn" id="clockRouletteBtn">▷</button>
+    </div>
+  </div>
+
+  <!-- Instruction Section -->
+  <div class="instruction-section">
+    <div class="instruction-text" id="instructionText">
+      の
+      <span id="instrHourWrap"><span class="instr-num" id="instrHourNum">--</span>時間</span><span class="instr-num" id="instrMinNum">--</span>分<span id="instrDir">--</span>
+    </div>
+    <div class="btn-row">
+      <button class="icon-btn" id="instrRouletteBtn">▷</button>
+    </div>
+  </div>
+</div>
+
+<!-- Answer Section -->
+<div class="answer-section">
+  <div class="answer-label">こたえ</div>
+  <div class="drum-row">
+    <div class="drum" id="hourDrum">
+      <div class="drum-track"></div>
+      <div class="drum-fade-top"></div>
+      <div class="drum-highlight"></div>
+      <div class="drum-fade-bottom"></div>
+    </div>
+    <span class="drum-unit">時</span>
+    <div class="drum" id="minuteDrum">
+      <div class="drum-track"></div>
+      <div class="drum-fade-top"></div>
+      <div class="drum-highlight"></div>
+      <div class="drum-fade-bottom"></div>
+    </div>
+    <span class="drum-unit">分</span>
+  </div>
+  <button class="check-btn" id="checkBtn" disabled>こたえ合わせ</button>
+</div>
+
+<div class="feedback-mark" id="feedbackMark"></div>
+
+<!-- Settings Toggle -->
+<button class="settings-toggle" id="settingsToggle" aria-label="設定">⚙</button>
+
+<!-- Settings Overlay -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <h2>設定</h2>
+
+    <div class="setting-row">
+      <span class="setting-label">時計の刻み</span>
+      <div class="setting-control">
+        <select id="setClockStep">
+          <option value="1">1分</option>
+          <option value="5" selected>5分</option>
+          <option value="10">10分</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">時刻指示の刻み</span>
+      <div class="setting-control">
+        <select id="setInstrStep">
+          <option value="1">1分</option>
+          <option value="5" selected>5分</option>
+          <option value="10">10分</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">時刻指示の上限（時間）</span>
+      <div class="setting-control">
+        <select id="setInstrMaxHour">
+          <option value="0" selected>0時間まで</option>
+          <option value="1">1時間まで</option>
+          <option value="2">2時間まで</option>
+          <option value="3">3時間まで</option>
+          <option value="4">4時間まで</option>
+          <option value="5">5時間まで</option>
+          <option value="6">6時間まで</option>
+          <option value="7">7時間まで</option>
+          <option value="8">8時間まで</option>
+          <option value="9">9時間まで</option>
+          <option value="10">10時間まで</option>
+          <option value="11">11時間まで</option>
+          <option value="12">12時間まで</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">時刻指示の上限（分）</span>
+      <div class="setting-control">
+        <select id="setInstrMax">
+          <option value="10">10分まで</option>
+          <option value="15" selected>15分まで</option>
+          <option value="20">20分まで</option>
+          <option value="30">30分まで</option>
+          <option value="45">45分まで</option>
+          <option value="60">60分まで</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">停止までの時間</span>
+      <div class="setting-control">
+        <button class="spin-btn" id="decDecel">▽</button>
+        <span class="spin-val" id="valDecel">3</span>
+        <button class="spin-btn" id="incDecel">△</button>
+        <span>秒</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">前後設定</span>
+      <div class="setting-control">
+        <select id="setDirection">
+          <option value="random" selected>ランダム</option>
+          <option value="before">前のみ</option>
+          <option value="after">後のみ</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <span class="setting-label">表示モード</span>
+      <div class="setting-control">
+        <select id="setDisplay">
+          <option value="analog">アナログのみ</option>
+          <option value="both">デジタル併記</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="settings-close" id="settingsClose">閉じる</button>
+  </div>
+</div>
+
+<script>
+// ===== State =====
+const state = {
+  hours: 10,
+  minutes: 0,
+  clockStep: 5,
+  instrStep: 5,
+  instrMax: 15,
+  instrMaxHour: 0,
+  decelTime: 3,
+  direction: 'random',
+  displayMode: 'analog',
+  clockSpinning: false,
+  instrSpinning: false,
+  dragging: false,
+};
+
+// ===== Elements =====
+const canvas = document.getElementById('clockCanvas');
+const ctx = canvas.getContext('2d');
+const clockContainer = document.getElementById('clockContainer');
+const digitalDisplay = document.getElementById('digitalDisplay');
+const clockBtn = document.getElementById('clockRouletteBtn');
+const instrBtn = document.getElementById('instrRouletteBtn');
+const instrHourWrap = document.getElementById('instrHourWrap');
+const instrHourNum = document.getElementById('instrHourNum');
+const instrMinNum = document.getElementById('instrMinNum');
+const instrDir = document.getElementById('instrDir');
+const checkBtn = document.getElementById('checkBtn');
+const feedbackMark = document.getElementById('feedbackMark');
+
+const setClockStep = document.getElementById('setClockStep');
+const setInstrStep = document.getElementById('setInstrStep');
+const setInstrMax = document.getElementById('setInstrMax');
+const setInstrMaxHour = document.getElementById('setInstrMaxHour');
+const setDirection = document.getElementById('setDirection');
+const setDisplay = document.getElementById('setDisplay');
+const valDecel = document.getElementById('valDecel');
+
+// ===== Settings Logic =====
+document.getElementById('settingsToggle').addEventListener('click', () => {
+  document.getElementById('settingsOverlay').classList.add('open');
+});
+document.getElementById('settingsClose').addEventListener('click', () => {
+  document.getElementById('settingsOverlay').classList.remove('open');
+});
+document.getElementById('settingsOverlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+setClockStep.addEventListener('change', () => { state.clockStep = +setClockStep.value; });
+setInstrStep.addEventListener('change', () => { state.instrStep = +setInstrStep.value; });
+setInstrMax.addEventListener('change', () => { state.instrMax = +setInstrMax.value; });
+setInstrMaxHour.addEventListener('change', () => { state.instrMaxHour = +setInstrMaxHour.value; });
+setDirection.addEventListener('change', () => { state.direction = setDirection.value; });
+
+setDisplay.addEventListener('change', () => {
+  state.displayMode = setDisplay.value;
+  applyDisplayMode();
+});
+
+function applyDisplayMode() {
+  const m = state.displayMode;
+  clockContainer.classList.toggle('hidden', false);
+  digitalDisplay.classList.toggle('hidden', m === 'analog');
+  updateDigital();
+}
+
+document.getElementById('decDecel').addEventListener('click', () => {
+  state.decelTime = Math.max(1, state.decelTime - 1);
+  valDecel.textContent = state.decelTime;
+});
+document.getElementById('incDecel').addEventListener('click', () => {
+  state.decelTime = Math.min(10, state.decelTime + 1);
+  valDecel.textContent = state.decelTime;
+});
+
+// ===== Tap to toggle 前/後 =====
+instrDir.addEventListener('click', () => {
+  if (state.instrSpinning) return;
+  if (instrCurrentDir === null) return;
+  instrCurrentDir = instrCurrentDir === '前' ? '後' : '前';
+  updateInstrDisplay();
+});
+
+// ===== Clock Drawing =====
+function drawClock() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const r = Math.min(cx, cy) - 20;
+
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#000';
+  ctx.stroke();
+
+  for (let i = 0; i < 12; i++) {
+    const angle = (i * 30 - 90) * Math.PI / 180;
+    const innerR = r - 24;
+    const outerR = r - 6;
+    ctx.beginPath();
+    ctx.moveTo(cx + innerR * Math.cos(angle), cy + innerR * Math.sin(angle));
+    ctx.lineTo(cx + outerR * Math.cos(angle), cy + outerR * Math.sin(angle));
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+
+    const numR = r - 46;
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const num = i === 0 ? 12 : i;
+    ctx.fillText(num, cx + numR * Math.cos(angle), cy + numR * Math.sin(angle));
+  }
+
+  for (let i = 0; i < 60; i++) {
+    if (i % 5 === 0) continue;
+    const angle = (i * 6 - 90) * Math.PI / 180;
+    const innerR = r - 12;
+    const outerR = r - 6;
+    ctx.beginPath();
+    ctx.moveTo(cx + innerR * Math.cos(angle), cy + innerR * Math.sin(angle));
+    ctx.lineTo(cx + outerR * Math.cos(angle), cy + outerR * Math.sin(angle));
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#888';
+    ctx.stroke();
+  }
+
+  const totalMin = state.hours * 60 + state.minutes;
+
+  const hAngle = ((totalMin / 720) * 360 - 90) * Math.PI / 180;
+  const hLen = r * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + hLen * Math.cos(hAngle), cy + hLen * Math.sin(hAngle));
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#000';
+  ctx.stroke();
+
+  const mAngle = ((state.minutes / 60) * 360 - 90) * Math.PI / 180;
+  const mLen = r * 0.72;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + mLen * Math.cos(mAngle), cy + mLen * Math.sin(mAngle));
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#000';
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+}
+
+function updateDigital() {
+  const hh = String(state.hours === 0 ? 12 : state.hours);
+  const mm = String(Math.round(state.minutes)).padStart(2, '0');
+  digitalDisplay.textContent = `${hh}:${mm}`;
+}
+
+function snapMinutes(m, step) {
+  return Math.round(m / step) * step;
+}
+
+// ===== Drag to set time =====
+let prevAngle = null;
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  let clientX, clientY;
+  if (e.touches && e.touches.length > 0) {
+    const touch = e.touches[0];
+    clientX = touch.clientX;
+    clientY = touch.clientY;
+  } else if (e.changedTouches && e.changedTouches.length > 0) {
+    clientX = e.changedTouches[0].clientX;
+    clientY = e.changedTouches[0].clientY;
+  } else {
+    clientX = e.clientX;
+    clientY = e.clientY;
+  }
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (clientX - rect.left) * scaleX - canvas.width / 2,
+    y: (clientY - rect.top) * scaleY - canvas.height / 2,
+  };
+}
+
+function getAngle(e) {
+  const pos = getPos(e);
+  return Math.atan2(pos.y, pos.x);
+}
+
+function onDragStart(e) {
+  if (state.clockSpinning) return;
+  e.preventDefault();
+  state.dragging = true;
+  prevAngle = getAngle(e);
+}
+
+function onDragMove(e) {
+  if (!state.dragging) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const angle = getAngle(e);
+  if (prevAngle === null) {
+    prevAngle = angle;
+    return;
+  }
+
+  let delta = angle - prevAngle;
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+
+  const deltaMin = (delta / (Math.PI * 2)) * 60;
+  let total = state.hours * 60 + state.minutes + deltaMin;
+  while (total < 0) total += 720;
+  while (total >= 720) total -= 720;
+
+  state.hours = Math.floor(total / 60) % 12;
+  state.minutes = ((total % 60) + 60) % 60;
+
+  prevAngle = angle;
+  drawClock();
+  updateDigital();
+}
+
+function onDragEnd(e) {
+  if (!state.dragging) return;
+  state.dragging = false;
+  state.minutes = snapMinutes(Math.round(state.minutes), state.clockStep) % 60;
+  if (state.minutes >= 60) { state.minutes = 0; state.hours = (state.hours + 1) % 12; }
+  drawClock();
+  updateDigital();
+  prevAngle = null;
+}
+
+canvas.addEventListener('mousedown', onDragStart, { passive: false });
+window.addEventListener('mousemove', onDragMove, { passive: false });
+window.addEventListener('mouseup', onDragEnd);
+
+canvas.addEventListener('touchstart', onDragStart, { passive: false });
+canvas.addEventListener('touchmove', onDragMove, { passive: false });
+canvas.addEventListener('touchend', onDragEnd, { passive: false });
+canvas.addEventListener('touchcancel', onDragEnd, { passive: false });
+
+// ===== Clock Roulette =====
+let clockAnimId = null;
+let clockSpeed = 0;
+
+clockBtn.addEventListener('click', () => {
+  if (!state.clockSpinning) {
+    state.clockSpinning = true;
+    clockBtn.textContent = '▢';
+    clockSpeed = 12 + Math.random() * 6;
+    animateClock();
+  } else {
+    clockBtn.disabled = true;
+    clockBtn.textContent = '…';
+    decelerateClock();
+  }
+});
+
+function animateClock() {
+  if (!state.clockSpinning) return;
+  const deltaMin = clockSpeed / 6;
+  let total = state.hours * 60 + state.minutes + deltaMin;
+  while (total >= 720) total -= 720;
+  state.hours = Math.floor(total / 60) % 12;
+  state.minutes = total % 60;
+  drawClock();
+  updateDigital();
+  clockAnimId = requestAnimationFrame(animateClock);
+}
+
+function decelerateClock() {
+  const startSpeed = clockSpeed;
+  const duration = state.decelTime * 1000;
+  const startTime = performance.now();
+  cancelAnimationFrame(clockAnimId);
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    clockSpeed = startSpeed * (1 - ease);
+
+    const deltaMin = clockSpeed / 6;
+    let total = state.hours * 60 + state.minutes + deltaMin;
+    while (total >= 720) total -= 720;
+    state.hours = Math.floor(total / 60) % 12;
+    state.minutes = total % 60;
+    drawClock();
+    updateDigital();
+
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      state.minutes = snapMinutes(Math.round(state.minutes), state.clockStep) % 60;
+      if (state.minutes === 60) { state.minutes = 0; state.hours = (state.hours + 1) % 12; }
+      drawClock();
+      updateDigital();
+      state.clockSpinning = false;
+      clockBtn.textContent = '▷';
+      clockBtn.disabled = false;
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// ===== Instruction Roulette =====
+let instrAnimId = null;
+let instrCurrentH = null;
+let instrCurrentM = null;
+let instrCurrentDir = null;
+let instrTickIndex = 0;
+
+instrBtn.addEventListener('click', () => {
+  if (!state.instrSpinning) {
+    state.instrSpinning = true;
+    instrBtn.textContent = '▢';
+    checkBtn.disabled = true;
+    animateInstr();
+  } else {
+    instrBtn.disabled = true;
+    instrBtn.textContent = '…';
+    decelerateInstr();
+  }
+});
+
+function getInstrCandidates() {
+  const step = state.instrStep;
+  const maxM = state.instrMax;
+  const maxH = state.instrMaxHour;
+  const list = [];
+  for (let h = 0; h <= maxH; h++) {
+    for (let m = 0; m <= maxM; m += step) {
+      if (h === 0 && m === 0) continue;
+      list.push({ h, m });
+    }
+  }
+  if (list.length === 0) list.push({ h: 0, m: step });
+  return list;
+}
+
+function pickDirection() {
+  if (state.direction === 'before') return '前';
+  if (state.direction === 'after') return '後';
+  return Math.random() < 0.5 ? '前' : '後';
+}
+
+function updateInstrDisplay() {
+  if (instrCurrentH === null) {
+    instrHourWrap.classList.remove('show');
+    instrHourNum.textContent = '--';
+    instrMinNum.textContent = '--';
+    instrDir.textContent = '--';
+    return;
+  }
+  if (instrCurrentH > 0) {
+    instrHourWrap.classList.add('show');
+    instrHourNum.textContent = instrCurrentH;
+  } else {
+    instrHourWrap.classList.remove('show');
+  }
+  instrMinNum.textContent = instrCurrentM;
+  instrDir.textContent = instrCurrentDir;
+}
+
+function animateInstr() {
+  if (!state.instrSpinning) return;
+  const candidates = getInstrCandidates();
+  instrTickIndex = (instrTickIndex + 1) % candidates.length;
+  const c = candidates[instrTickIndex];
+  instrCurrentH = c.h;
+  instrCurrentM = c.m;
+  instrCurrentDir = pickDirection();
+  updateInstrDisplay();
+  instrAnimId = setTimeout(animateInstr, 60);
+}
+
+function decelerateInstr() {
+  clearTimeout(instrAnimId);
+  const duration = state.decelTime * 1000;
+  const startTime = performance.now();
+  const minInterval = 60;
+  const maxInterval = 500;
+  const candidates = getInstrCandidates();
+
+  function step() {
+    const elapsed = performance.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const interval = minInterval + (maxInterval - minInterval) * ease;
+
+    instrTickIndex = (instrTickIndex + 1) % candidates.length;
+    const c = candidates[instrTickIndex];
+    instrCurrentH = c.h;
+    instrCurrentM = c.m;
+    instrCurrentDir = pickDirection();
+    updateInstrDisplay();
+
+    if (t < 1) {
+      setTimeout(step, interval);
+    } else {
+      state.instrSpinning = false;
+      instrBtn.textContent = '▷';
+      instrBtn.disabled = false;
+      checkBtn.disabled = false;
+    }
+  }
+  step();
+}
+
+// ===== Drum（無限にぐるぐる回るスロット式ドラム） =====
+function pmod(n, m) { return ((n % m) + m) % m; }
+
+function createDrum(containerEl, values, ITEM_H) {
+  const CYCLE = values.length;
+  const REPEAT = 5; // 前後2周分の余裕を持たせて無限に見せる
+  const OFFSET_BASE = CYCLE * 2;
+  const track = containerEl.querySelector('.drum-track');
+
+  let rows = '';
+  for (let i = 0; i < CYCLE * REPEAT; i++) {
+    const v = values[i % CYCLE];
+    rows += `<div class="drum-item${v === '－' ? ' empty' : ''}">${v}</div>`;
+  }
+  track.innerHTML = rows;
+
+  let curIndex = 0;
+  let base = OFFSET_BASE;
+  let dragging = false;
+  let startY = 0;
+  let dragBase = 0;
+
+  // 表示は1項目のみなので、そのままoffset位置を上端に合わせる
+  function applyY(offset, animate) {
+    track.style.transition = animate ? 'transform 0.18s cubic-bezier(.25,.46,.45,.94)' : 'none';
+    track.style.transform = `translateY(${-offset * ITEM_H}px)`;
+  }
+
+  function getValue() { return values[curIndex]; }
+
+  function setIndex(i, animate) {
+    curIndex = pmod(i, CYCLE);
+    base = OFFSET_BASE + curIndex;
+    applyY(base, !!animate);
+  }
+
+  const gy = (e) => e.changedTouches ? e.changedTouches[0].clientY
+                  : e.touches ? e.touches[0].clientY
+                  : e.clientY;
+
+  function startDrag(e) {
+    e.preventDefault();
+    dragging = true;
+    startY = gy(e);
+    dragBase = base;
+    track.style.transition = 'none';
+  }
+  function moveDrag(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    applyY(dragBase + (-(gy(e) - startY) / ITEM_H), false);
+  }
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    const raw = dragBase + (-(gy(e) - startY) / ITEM_H);
+    const snapped = Math.round(raw);
+    const nm = pmod(snapped, CYCLE);
+    curIndex = nm; // 値の確定は即時に行う（判定用）
+    applyY(snapped, true);
+    setTimeout(() => {
+      base = OFFSET_BASE + nm;
+      applyY(base, false); // 描画位置を中央付近に巻き戻して無限に回せるようにする
+    }, 190);
+  }
+
+  containerEl.addEventListener('mousedown', startDrag);
+  containerEl.addEventListener('mousemove', moveDrag);
+  containerEl.addEventListener('mouseup', endDrag);
+  containerEl.addEventListener('mouseleave', (e) => { if (dragging) endDrag(e); });
+
+  containerEl.addEventListener('touchstart', startDrag, { passive: false });
+  containerEl.addEventListener('touchmove', moveDrag, { passive: false });
+  containerEl.addEventListener('touchend', endDrag);
+  containerEl.addEventListener('touchcancel', endDrag);
+
+  containerEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    setIndex(curIndex + (e.deltaY > 0 ? 1 : -1), true);
+  }, { passive: false });
+
+  setIndex(0, false);
+  return { getValue, setIndex };
+}
+
+// 時：「－」（未選択）＋ 1〜12　／　分：0〜59
+const hourValues = ['－', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const minuteValues = [];
+for (let v = 0; v <= 59; v++) minuteValues.push(v);
+
+const hourDrum = createDrum(document.getElementById('hourDrum'), hourValues, 60);
+const minuteDrum = createDrum(document.getElementById('minuteDrum'), minuteValues, 60);
+
+// ===== 正解判定 =====
+function computeTarget() {
+  const total = state.hours * 60 + state.minutes;
+  const offset = instrCurrentH * 60 + instrCurrentM;
+  let target = instrCurrentDir === '前' ? total - offset : total + offset;
+  target = ((target % 720) + 720) % 720;
+  const targetH24 = Math.floor(target / 60); // 0-11
+  const targetM = target % 60;
+  const displayH = targetH24 === 0 ? 12 : targetH24;
+  return { h: displayH, m: targetM };
+}
+
+checkBtn.addEventListener('click', () => {
+  if (instrCurrentH === null || state.instrSpinning) return;
+  const target = computeTarget();
+  const ansH = hourDrum.getValue(); // '－' または 1〜12
+  const ansM = minuteDrum.getValue(); // 1〜59
+  const correct = (ansH === target.h && ansM === target.m);
+  showFeedback(correct);
+});
+
+// ===== 効果音 =====
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(ctxA, freq, start, dur, type) {
+  const osc = ctxA.createOscillator();
+  const gain = ctxA.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(0.3, start + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  osc.connect(gain);
+  gain.connect(ctxA.destination);
+  osc.start(start);
+  osc.stop(start + dur + 0.05);
+}
+
+function playCorrectSound() {
+  const a = getAudioCtx();
+  const now = a.currentTime;
+  playTone(a, 880, now, 0.28, 'sine');
+  playTone(a, 659, now + 0.30, 0.38, 'sine');
+}
+
+// やわらかい「ふにゃふにゃ〜」音：サイン波＋ゆっくりした浅いビブラート＋下降グライド
+function playWobble(ctxA, freq, start, dur) {
+  const osc = ctxA.createOscillator();
+  const gain = ctxA.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, start);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.6, start + dur);
+
+  const lfo = ctxA.createOscillator();
+  const lfoGain = ctxA.createGain();
+  lfo.frequency.value = 6.5;   // ゆっくりした揺れ
+  lfoGain.gain.value = 7;      // 浅い揺れ
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(0.16, start + 0.06);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+
+  osc.connect(gain);
+  gain.connect(ctxA.destination);
+  osc.start(start);
+  lfo.start(start);
+  osc.stop(start + dur + 0.05);
+  lfo.stop(start + dur + 0.05);
+}
+
+function playWrongSound() {
+  const a = getAudioCtx();
+  const now = a.currentTime;
+  const notes = [392.0, 349.23]; // ソ→ファ、やさしく力が抜けるように2音
+  let t = now;
+  notes.forEach((freq) => {
+    playWobble(a, freq, t, 0.46);
+    t += 0.4;
+  });
+}
+
+// ===== フィードバック表示 =====
+function showFeedback(correct) {
+  feedbackMark.classList.remove('correct', 'wrong', 'show');
+  void feedbackMark.offsetWidth;
+  feedbackMark.textContent = correct ? '○' : '×';
+  feedbackMark.classList.add(correct ? 'correct' : 'wrong');
+  if (correct) playCorrectSound(); else playWrongSound();
+  requestAnimationFrame(() => {
+    feedbackMark.classList.add('show');
+  });
+  setTimeout(() => {
+    feedbackMark.classList.remove('show');
+  }, 950);
+}
+
+// ===== Init =====
+drawClock();
+updateDigital();
+updateInstrDisplay();
+applyDisplayMode();
+</script>
+
+</body>
+</html>
