@@ -261,7 +261,7 @@ canvas#clockCanvas:active { cursor: grabbing; }
 /* ===== Settings ===== */
 .settings-toggle {
   position: fixed;
-  bottom: 12px;
+  top: 12px;
   left: 12px;
   width: 44px;
   height: 44px;
@@ -1031,10 +1031,21 @@ function createDrum(containerEl, values, ITEM_H) {
     }, 190);
   }
 
-  containerEl.addEventListener('mousedown', startDrag);
-  containerEl.addEventListener('mousemove', moveDrag);
-  containerEl.addEventListener('mouseup', endDrag);
-  containerEl.addEventListener('mouseleave', (e) => { if (dragging) endDrag(e); });
+  // PCではマウスがドラム枠の外に出ると mousemove を拾えなくなるため、
+  // ドラッグ中は window 全体で監視する（1段しか動かない問題への対策）
+  function onMouseDown(e) {
+    startDrag(e);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+  function onMouseMove(e) { moveDrag(e); }
+  function onMouseUp(e) {
+    endDrag(e);
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+  }
+
+  containerEl.addEventListener('mousedown', onMouseDown);
 
   containerEl.addEventListener('touchstart', startDrag, { passive: false });
   containerEl.addEventListener('touchmove', moveDrag, { passive: false });
