@@ -328,6 +328,8 @@ canvas#clockCanvas:active { cursor: grabbing; }
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .setting-control select,
@@ -407,7 +409,7 @@ canvas#clockCanvas:active { cursor: grabbing; }
   <div class="instruction-section">
     <div class="instruction-text" id="instructionText">
       の
-      <span id="instrHourWrap"><span class="instr-num" id="instrHourNum">--</span>時間</span><span class="instr-num" id="instrMinNum">--</span>分<span id="instrDir">--</span>
+      <span id="instrHourWrap"><span class="instr-num" id="instrHourNum">--</span>時間</span><span id="instrMinWrap"><span class="instr-num" id="instrMinNum">--</span>分</span><span id="instrDir">--</span>
     </div>
     <div class="btn-row">
       <button class="icon-btn" id="instrRouletteBtn">▷</button>
@@ -448,7 +450,7 @@ canvas#clockCanvas:active { cursor: grabbing; }
     <h2>設定</h2>
 
     <div class="setting-row">
-      <span class="setting-label">時計の刻み</span>
+      <span class="setting-label">時計のきざみ</span>
       <div class="setting-control">
         <select id="setClockStep">
           <option value="1">1分</option>
@@ -459,7 +461,7 @@ canvas#clockCanvas:active { cursor: grabbing; }
     </div>
 
     <div class="setting-row">
-      <span class="setting-label">時刻指示の刻み</span>
+      <span class="setting-label">前後のきざみ</span>
       <div class="setting-control">
         <select id="setInstrStep">
           <option value="1">1分</option>
@@ -470,13 +472,24 @@ canvas#clockCanvas:active { cursor: grabbing; }
     </div>
 
     <div class="setting-row">
-      <span class="setting-label">時刻指示の上限（時間）</span>
+      <span class="setting-label">時刻指示の上限</span>
       <div class="setting-control">
-        <select id="setInstrMaxHour">
-          <option value="0" selected>0時間まで</option>
+        <select id="setInstrUnit">
+          <option value="minute" selected>分</option>
+          <option value="hour">時間</option>
+        </select>
+        <select id="setInstrMax">
+          <option value="10">10分まで</option>
+          <option value="15" selected>15分まで</option>
+          <option value="20">20分まで</option>
+          <option value="30">30分まで</option>
+          <option value="45">45分まで</option>
+          <option value="59">59分まで</option>
+        </select>
+        <select id="setInstrMaxHour" style="display:none;">
           <option value="1">1時間まで</option>
           <option value="2">2時間まで</option>
-          <option value="3">3時間まで</option>
+          <option value="3" selected>3時間まで</option>
           <option value="4">4時間まで</option>
           <option value="5">5時間まで</option>
           <option value="6">6時間まで</option>
@@ -486,20 +499,6 @@ canvas#clockCanvas:active { cursor: grabbing; }
           <option value="10">10時間まで</option>
           <option value="11">11時間まで</option>
           <option value="12">12時間まで</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <span class="setting-label">時刻指示の上限（分）</span>
-      <div class="setting-control">
-        <select id="setInstrMax">
-          <option value="10">10分まで</option>
-          <option value="15" selected>15分まで</option>
-          <option value="20">20分まで</option>
-          <option value="30">30分まで</option>
-          <option value="45">45分まで</option>
-          <option value="60">60分まで</option>
         </select>
       </div>
     </div>
@@ -547,7 +546,8 @@ const state = {
   clockStep: 5,
   instrStep: 5,
   instrMax: 15,
-  instrMaxHour: 0,
+  instrMaxHour: 3,
+  instrUnit: 'minute', // 'minute' または 'hour'
   decelTime: 3,
   direction: 'random',
   displayMode: 'analog',
@@ -565,6 +565,7 @@ const clockBtn = document.getElementById('clockRouletteBtn');
 const instrBtn = document.getElementById('instrRouletteBtn');
 const instrHourWrap = document.getElementById('instrHourWrap');
 const instrHourNum = document.getElementById('instrHourNum');
+const instrMinWrap = document.getElementById('instrMinWrap');
 const instrMinNum = document.getElementById('instrMinNum');
 const instrDir = document.getElementById('instrDir');
 const checkBtn = document.getElementById('checkBtn');
@@ -574,6 +575,7 @@ const setClockStep = document.getElementById('setClockStep');
 const setInstrStep = document.getElementById('setInstrStep');
 const setInstrMax = document.getElementById('setInstrMax');
 const setInstrMaxHour = document.getElementById('setInstrMaxHour');
+const setInstrUnit = document.getElementById('setInstrUnit');
 const setDirection = document.getElementById('setDirection');
 const setDisplay = document.getElementById('setDisplay');
 const valDecel = document.getElementById('valDecel');
@@ -593,6 +595,11 @@ setClockStep.addEventListener('change', () => { state.clockStep = +setClockStep.
 setInstrStep.addEventListener('change', () => { state.instrStep = +setInstrStep.value; });
 setInstrMax.addEventListener('change', () => { state.instrMax = +setInstrMax.value; });
 setInstrMaxHour.addEventListener('change', () => { state.instrMaxHour = +setInstrMaxHour.value; });
+setInstrUnit.addEventListener('change', () => {
+  state.instrUnit = setInstrUnit.value;
+  setInstrMax.style.display = state.instrUnit === 'minute' ? 'inline-block' : 'none';
+  setInstrMaxHour.style.display = state.instrUnit === 'hour' ? 'inline-block' : 'none';
+});
 setDirection.addEventListener('change', () => { state.direction = setDirection.value; });
 
 setDisplay.addEventListener('change', () => {
@@ -881,18 +888,26 @@ instrBtn.addEventListener('click', () => {
   }
 });
 
+// 「分」または「時間」のどちらかの上限に従って候補を作る
+// 時間モードのときは「前後のきざみ」設定に従い、分の部分も一緒に出題する
 function getInstrCandidates() {
-  const step = state.instrStep;
-  const maxM = state.instrMax;
-  const maxH = state.instrMaxHour;
   const list = [];
-  for (let h = 0; h <= maxH; h++) {
-    for (let m = 0; m <= maxM; m += step) {
-      if (h === 0 && m === 0) continue;
-      list.push({ h, m });
+  const step = state.instrStep;
+  if (state.instrUnit === 'hour') {
+    const maxH = state.instrMaxHour;
+    for (let h = 1; h <= maxH; h++) {
+      for (let m = 0; m < 60; m += step) {
+        // 「◯時間まで」を超えないよう、最後の時間帯は分0のみ許可する
+        if (h === maxH && m > 0) continue;
+        list.push({ h, m });
+      }
     }
+    if (list.length === 0) list.push({ h: 1, m: 0 });
+  } else {
+    const maxM = state.instrMax;
+    for (let m = step; m <= maxM; m += step) list.push({ h: 0, m });
+    if (list.length === 0) list.push({ h: 0, m: step });
   }
-  if (list.length === 0) list.push({ h: 0, m: step });
   return list;
 }
 
@@ -905,6 +920,7 @@ function pickDirection() {
 function updateInstrDisplay() {
   if (instrCurrentH === null) {
     instrHourWrap.classList.remove('show');
+    instrMinWrap.style.display = 'inline';
     instrHourNum.textContent = '--';
     instrMinNum.textContent = '--';
     instrDir.textContent = '--';
@@ -916,7 +932,12 @@ function updateInstrDisplay() {
   } else {
     instrHourWrap.classList.remove('show');
   }
-  instrMinNum.textContent = instrCurrentM;
+  if (instrCurrentM > 0) {
+    instrMinWrap.style.display = 'inline';
+    instrMinNum.textContent = instrCurrentM;
+  } else {
+    instrMinWrap.style.display = 'none';
+  }
   instrDir.textContent = instrCurrentDir;
 }
 
